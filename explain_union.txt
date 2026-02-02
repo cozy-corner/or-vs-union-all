@@ -1,0 +1,48 @@
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=4077.13..4168.43 rows=9130 width=520) (actual time=27.487..28.291 rows=11500 loops=1)
+   Group Key: b.book_id, b.title
+   Batches: 1  Memory Usage: 913kB
+   Buffers: shared hit=5421
+   ->  Append  (cost=4.74..4031.48 rows=9130 width=520) (actual time=0.056..24.958 rows=11501 loops=1)
+         Buffers: shared hit=5421
+         ->  Nested Loop  (cost=4.74..169.58 rows=20 width=14) (actual time=0.055..8.820 rows=1001 loops=1)
+               Buffers: shared hit=4132
+               ->  Nested Loop  (cost=4.45..162.65 rows=20 width=4) (actual time=0.046..2.060 rows=1001 loops=1)
+                     Buffers: shared hit=1129
+                     ->  Seq Scan on authors a  (cost=0.00..90.50 rows=1 width=4) (actual time=0.029..0.343 rows=50 loops=1)
+                           Filter: ((name)::text ~~ '%夏目%'::text)
+                           Rows Removed by Filter: 4950
+                           Buffers: shared hit=28
+                     ->  Bitmap Heap Scan on book_authors ba  (cost=4.45..71.95 rows=20 width=8) (actual time=0.008..0.028 rows=20 loops=50)
+                           Recheck Cond: (author_id = a.author_id)
+                           Heap Blocks: exact=1001
+                           Buffers: shared hit=1101
+                           ->  Bitmap Index Scan on idx_book_authors_author_id  (cost=0.00..4.44 rows=20 width=0) (actual time=0.005..0.005 rows=20 loops=50)
+                                 Index Cond: (author_id = a.author_id)
+                                 Buffers: shared hit=100
+               ->  Index Scan using books_pkey on books b  (cost=0.29..0.35 rows=1 width=14) (actual time=0.005..0.005 rows=1 loops=1001)
+                     Index Cond: (book_id = ba.book_id)
+                     Buffers: shared hit=3003
+         ->  Seq Scan on books b_1  (cost=0.00..1891.00 rows=10 width=14) (actual time=0.015..4.919 rows=500 loops=1)
+               Filter: ((title)::text ~~ '%夏目%'::text)
+               Rows Removed by Filter: 99500
+               Buffers: shared hit=641
+         ->  Hash Join  (cost=20.64..1925.25 rows=9100 width=14) (actual time=0.112..10.601 rows=10000 loops=1)
+               Hash Cond: (b_2.publisher_id = p.publisher_id)
+               Buffers: shared hit=648
+               ->  Seq Scan on books b_2  (cost=0.00..1641.00 rows=100000 width=18) (actual time=0.009..4.155 rows=100000 loops=1)
+                     Buffers: shared hit=641
+               ->  Hash  (cost=19.50..19.50 rows=91 width=4) (actual time=0.082..0.083 rows=100 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 12kB
+                     Buffers: shared hit=7
+                     ->  Seq Scan on publishers p  (cost=0.00..19.50 rows=91 width=4) (actual time=0.008..0.064 rows=100 loops=1)
+                           Filter: ((name)::text ~~ '%夏目%'::text)
+                           Rows Removed by Filter: 900
+                           Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=316
+ Planning Time: 0.626 ms
+ Execution Time: 28.856 ms
+(44 rows)
+
