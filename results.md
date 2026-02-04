@@ -68,9 +68,9 @@ CREATE INDEX idx_book_authors_author_id ON book_authors(author_id);
 
 | パターン | 実行時間 | 高速化率 |
 |---------|---------|---------|
-| OR条件 + DISTINCT | 71.2 ms | - |
-| UNION | 28.9 ms | 2.5倍 |
-| **UNION ALL + DISTINCT** | **20.1 ms** | **3.5倍** |
+| OR条件 + DISTINCT | 74.1 ms | - |
+| UNION | 26.3 ms | 2.8倍 |
+| **UNION ALL + DISTINCT** | **18.2 ms** | **4.1倍** |
 
 すべて等価な結果（11,500行）を返す。
 
@@ -81,19 +81,19 @@ CREATE INDEX idx_book_authors_author_id ON book_authors(author_id);
 ```sql
 SELECT DISTINCT b.book_id, b.title
 FROM books b
-LEFT JOIN book_authors ba ON b.book_id = ba.book_id
-LEFT JOIN authors a ON ba.author_id = a.author_id
-LEFT JOIN publishers p ON b.publisher_id = p.publisher_id
+INNER JOIN book_authors ba ON b.book_id = ba.book_id
+INNER JOIN authors a ON ba.author_id = a.author_id
+INNER JOIN publishers p ON b.publisher_id = p.publisher_id
 WHERE
   a.name LIKE '%夏目%' OR
   b.title LIKE '%夏目%' OR
   p.name LIKE '%夏目%';
 ```
 
-**実行時間: 71.2 ms**
+**実行時間: 74.1 ms**
 
 **問題点:**
-- すべてのテーブルをLEFT JOINする必要がある
+- すべてのテーブルをINNER JOINする必要がある
 - 100,000行を処理してから88,500行をフィルタで除外
 - 結合後に重複除去（HashAggregate）
 - Sequential Scanのみ
@@ -121,12 +121,12 @@ JOIN publishers p ON b.publisher_id = p.publisher_id
 WHERE p.name LIKE '%夏目%';
 ```
 
-**実行時間: 28.9 ms**
+**実行時間: 26.3 ms**
 
 **改善点:**
 - 各クエリが必要なテーブルだけをJOIN
 - 各UNION操作で重複除去
-- OR条件より2.5倍高速
+- OR条件より2.8倍高速
 
 ### パターン3: UNION ALL + DISTINCT（最速）
 
@@ -153,7 +153,7 @@ SELECT DISTINCT * FROM (
 ) sub;
 ```
 
-**実行時間: 20.1 ms**
+**実行時間: 18.2 ms**
 
 **最適化のポイント:**
 - 並列実行（Parallel Append、2ワーカー）が発動
@@ -175,7 +175,7 @@ SELECT DISTINCT * FROM (
 ### 2. JOIN戦略の違い
 
 **OR条件:**
-- すべてのテーブルをLEFT JOIN
+- すべてのテーブルをINNER JOIN
 - 著者だけで検索する場合も出版社テーブルまでJOIN（無駄）
 
 **UNION系:**
@@ -196,11 +196,11 @@ SELECT DISTINCT * FROM (
 ### パターン1: OR条件 + DISTINCT
 
 ```
-HashAggregate (actual time=69.8..70.6ms rows=11500)
-  -> Hash Left Join (著者)
+HashAggregate (actual time=71.2..72.0ms rows=11500)
+  -> Hash Join (著者)
        Filter: (著者 OR タイトル OR 出版社) にマッチ
        Rows Removed by Filter: 88500  ← 88%を除外
-       -> Hash Left Join (出版社)
+       -> Hash Join (出版社)
             -> Hash Right Join (書籍-著者)
                  -> Seq Scan on book_authors (100,000行)
                  -> Seq Scan on books (100,000行)
@@ -208,7 +208,7 @@ HashAggregate (actual time=69.8..70.6ms rows=11500)
        -> Seq Scan on authors (5,000行)
 
 Buffers: shared hit=1119
-Execution Time: 71.2 ms
+Execution Time: 72.6 ms
 ```
 
 **特徴:**
@@ -219,7 +219,7 @@ Execution Time: 71.2 ms
 ### パターン2: UNION
 
 ```
-HashAggregate (actual time=27.5..28.3ms rows=11500)
+HashAggregate (actual time=21.1..21.9ms rows=11500)
   -> Append (UNION処理)
        -> Nested Loop (著者検索: 1,000行)
             -> Seq Scan on authors (50件ヒット)
@@ -231,7 +231,7 @@ HashAggregate (actual time=27.5..28.3ms rows=11500)
             -> Hash of publishers (100件ヒット)
 
 Buffers: shared hit=5421
-Execution Time: 28.9 ms
+Execution Time: 22.3 ms
 ```
 
 **特徴:**
@@ -242,7 +242,7 @@ Execution Time: 28.9 ms
 ### パターン3: UNION ALL + DISTINCT（最速）
 
 ```
-HashAggregate (actual time=18.8..19.6ms rows=11500)
+HashAggregate (actual time=16.6..17.4ms rows=11500)
   -> Gather (並列実行)
        Workers Planned: 2
        Workers Launched: 2
@@ -256,7 +256,7 @@ HashAggregate (actual time=18.8..19.6ms rows=11500)
                       -> Index Scan on books
 
 Buffers: shared hit=5439
-Execution Time: 20.1 ms
+Execution Time: 17.8 ms
 ```
 
 **特徴:**
@@ -269,9 +269,9 @@ Execution Time: 20.1 ms
 
 ### このテストケースでの結果
 
-- OR条件: 71.2 ms
-- UNION: 28.9 ms
-- UNION ALL + DISTINCT: 20.1 ms
+- OR条件: 74.1 ms
+- UNION: 26.3 ms
+- UNION ALL + DISTINCT: 18.2 ms
 
 このデータ・クエリでは、UNION ALL + DISTINCT が最速だった。
 
