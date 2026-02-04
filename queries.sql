@@ -2,9 +2,9 @@
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT DISTINCT b.book_id, b.title
 FROM books b
-LEFT JOIN book_authors ba ON b.book_id = ba.book_id
-LEFT JOIN authors a ON ba.author_id = a.author_id
-LEFT JOIN publishers p ON b.publisher_id = p.publisher_id
+INNER JOIN book_authors ba ON b.book_id = ba.book_id
+INNER JOIN authors a ON ba.author_id = a.author_id
+INNER JOIN publishers p ON b.publisher_id = p.publisher_id
 WHERE
   a.name LIKE '%夏目%' OR
   b.title LIKE '%夏目%' OR
