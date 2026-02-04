@@ -196,19 +196,22 @@ SELECT DISTINCT * FROM (
 ### パターン1: OR条件 + DISTINCT
 
 ```
-HashAggregate (actual time=71.2..72.0ms rows=11500)
-  -> Hash Join (著者)
-       Filter: (著者 OR タイトル OR 出版社) にマッチ
+HashAggregate (actual time=70.0..70.9ms rows=11500)
+  -> Hash Join (publisher_id)
+       Join Filter: (著者 OR タイトル OR 出版社) にマッチ
        Rows Removed by Filter: 88500  ← 88%を除外
-       -> Hash Join (出版社)
-            -> Hash Right Join (書籍-著者)
-                 -> Seq Scan on book_authors (100,000行)
-                 -> Seq Scan on books (100,000行)
+       -> Hash Join (author_id)
+            -> Hash Join (book_id)
+                 -> Seq Scan on book_authors (100,001行)
+                 -> Hash
+                      -> Seq Scan on books (100,000行)
+            -> Hash
+                 -> Seq Scan on authors (5,000行)
+       -> Hash
             -> Seq Scan on publishers (1,000行)
-       -> Seq Scan on authors (5,000行)
 
 Buffers: shared hit=1119
-Execution Time: 72.6 ms
+Execution Time: 71.5 ms
 ```
 
 **特徴:**
@@ -219,19 +222,22 @@ Execution Time: 72.6 ms
 ### パターン2: UNION
 
 ```
-HashAggregate (actual time=21.1..21.9ms rows=11500)
+HashAggregate (actual time=20.8..21.7ms rows=11500)
   -> Append (UNION処理)
-       -> Nested Loop (著者検索: 1,000行)
-            -> Seq Scan on authors (50件ヒット)
-            -> Bitmap Index Scan on book_authors
-            -> Index Scan on books
+       -> Nested Loop (著者検索: 1,001行)
+            -> Nested Loop
+                 -> Seq Scan on authors (50件ヒット)
+                 -> Bitmap Heap Scan on book_authors
+                      -> Bitmap Index Scan on idx_book_authors_author_id
+            -> Index Scan on books (books_pkey使用)
        -> Seq Scan on books (タイトル検索: 500行)
        -> Hash Join (出版社検索: 10,000行)
             -> Seq Scan on books
-            -> Hash of publishers (100件ヒット)
+            -> Hash
+                 -> Seq Scan on publishers (100件ヒット)
 
 Buffers: shared hit=5421
-Execution Time: 22.3 ms
+Execution Time: 22.2 ms
 ```
 
 **特徴:**
@@ -242,21 +248,26 @@ Execution Time: 22.3 ms
 ### パターン3: UNION ALL + DISTINCT（最速）
 
 ```
-HashAggregate (actual time=16.6..17.4ms rows=11500)
+HashAggregate (actual time=16.9..17.6ms rows=11500)
   -> Gather (並列実行)
        Workers Planned: 2
        Workers Launched: 2
        -> HashAggregate (各ワーカー)
             -> Parallel Append
                  -> Hash Join (出版社: 10,000行)
-                 -> Seq Scan (タイトル: 500行)
-                 -> Nested Loop (著者: 1,000行)
-                      -> Seq Scan on authors (50件)
-                      -> Bitmap Index Scan on book_authors
-                      -> Index Scan on books
+                      -> Seq Scan on books
+                      -> Hash
+                           -> Seq Scan on publishers
+                 -> Seq Scan on books (タイトル: 500行)
+                 -> Nested Loop (著者: 1,001行)
+                      -> Nested Loop
+                           -> Seq Scan on authors (50件)
+                           -> Bitmap Heap Scan on book_authors
+                                -> Bitmap Index Scan on idx_book_authors_author_id
+                      -> Index Scan on books (books_pkey使用)
 
 Buffers: shared hit=5439
-Execution Time: 17.8 ms
+Execution Time: 18.1 ms
 ```
 
 **特徴:**
